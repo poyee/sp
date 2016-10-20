@@ -66,7 +66,7 @@ int lock_reg(int fd, int cmd, int type, off_t offset, int whence, off_t len);
 
 int has_filename(char* filename, fileStruct* file_table, int biggest_fd);
 
-void set_filename(char* dst, char* src);
+void set_filename(fileStruct* file_struct, char* src);
 
 int main(int argc, char** argv) {
     int i, ret;
@@ -198,14 +198,14 @@ int main(int argc, char** argv) {
                         if(read_lock(fd, 0, SEEK_SET, 0 ) == -1) {
                             if (errno == EACCES || errno == EAGAIN) {
                                 fprintf(stderr, "[%s] is locked, request rejected.\n", requestP[i].filename);
-                                write(requestP[i].conn_fd, reject_header, sizeof(accept_header));
+                                write(requestP[i].conn_fd, reject_header, sizeof(reject_header));
                         	}
                         }
 
                         else {
+                            fprintf(stderr, "Opening file [%s]\n", requestP[i].filename);
+                            write(requestP[i].conn_fd, accept_header, sizeof(accept_header));
                             while (1) {
-                                fprintf(stderr, "Opening file [%s]\n", requestP[i].filename);
-                                write(requestP[i].conn_fd, accept_header, sizeof(accept_header));
                                 ret = read(fd, buf, sizeof(buf));
                                 if (ret < 0) {
                                     fprintf(stderr, "Error when reading file %s\n", requestP[i].filename);
@@ -262,7 +262,6 @@ int main(int argc, char** argv) {
                             // open the file here.
                             file_table[conn_fd].fd = open(requestP[i].filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
                             if(write_lock(file_table[conn_fd].fd, 0, SEEK_SET, 0 ) == -1 || has_filename(requestP[i].filename, file_table, biggest_fd)){
-                                if (errno == EACCES || errno == EAGAIN) {
                                     fprintf(stderr, "[%s] is locked, request rejected.\n", requestP[i].filename);
                                     write(requestP[i].conn_fd, reject_header, sizeof(reject_header));
                                     //close write file
@@ -273,12 +272,12 @@ int main(int argc, char** argv) {
 									close(requestP[i].conn_fd);
                         			FD_CLR(requestP[i].conn_fd, &request_set);
         							free_request(&requestP[i]);	
-                                }
                             }
                         
                         	else {
-                                set_filename(file_table[conn_fd].filename, requestP[i].filename);
+                                set_filename(&file_table[conn_fd], requestP[i].filename);
                             	fprintf(stderr, "Opening file [%s]\n", requestP[conn_fd].filename);
+                                fprintf(stderr, "%s\n", file_table[conn_fd].filename);
                             	write(requestP[i].conn_fd, accept_header, sizeof(accept_header));
                         	}
                         }
@@ -409,18 +408,18 @@ int lock_reg(int fd, int cmd, int type, off_t offset, int whence, off_t len)
 
 int has_filename(char* filename, fileStruct* file_table, int biggest_fd)
 {
-    for(int i = 0; i <= biggest_fd; i++) {
-        if(file_table[i].fd > 0){
-            if(strcmp(filename, file_table[i].filename))
+   for(int i = 0; i <= biggest_fd; i++) {
+        fprintf(stderr, "%d ", i);
+        fprintf(stderr, "%d\n", file_table[i].fd);
+        if(file_table[i].fd > 0 && file_table[i].filename != NULL &&(strcmp(filename, file_table[i].filename) == 0))
                 return 1;
-        }
     }
 
     return 0;
 }
 
-void set_filename(char* dst, char* src)
+void set_filename(fileStruct* file_struct, char* src)
 {
-    dst = (char*)malloc(sizeof(strlen(src)+1));
-    strcpy(dst, src);
+    file_struct->filename = (char*)malloc(sizeof(strlen(src)+1));
+    strcpy(file_struct->filename, src);
 }
